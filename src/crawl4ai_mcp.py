@@ -722,6 +722,111 @@ async def smart_crawl_url(ctx: Context, url: str, max_depth: int = 3, max_concur
         }, indent=2)
 
 @mcp.tool()
+async def crawl_urls_from_json(ctx: Context, file_path: str, max_concurrent: int = 10, chunk_size: int = 5000) -> str:
+    """
+    Crawls a list of URLs from a JSON file and stores the content in Supabase.
+
+    The JSON file must contain a single object with a "urls" key, which holds a list of URL strings.
+    Example JSON:
+    {
+      "urls": [
+        "https://example.com/page1",
+        "https://docs.example.com/getting-started"
+      ]
+    }
+
+    Args:
+        ctx: The MCP server provided context.
+        file_path: The absolute path to the JSON file containing the URLs.
+        max_concurrent: Maximum number of concurrent browser sessions (default: 10).
+        chunk_size: Maximum size of each content chunk in characters (default: 5000).
+
+    Returns:
+        JSON string with a summary of the crawl and storage operation.
+    """
+    # 1. Validate and read the JSON file
+    if not os.path.exists(file_path):
+        return json.dumps({"success": False, "error": f"File not found: {file_path}"}, indent=2)
+    if not file_path.endswith('.json'):
+        return json.dumps({"success": False, "error": "File must be a .json file"}, indent=2)
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        urls_to_crawl = data.get("urls")
+        if not isinstance(urls_to_crawl, list) or not urls_to_crawl:
+            return json.dumps({"success": False, "error": 'JSON file must contain a non-empty list of URLs under the "urls" key.'}, indent=2)
+    except json.JSONDecodeError:
+        return json.dumps({"success": False, "error": "Invalid JSON format in file."}, indent=2)
+    except Exception as e:
+        return json.dumps({"success": False, "error": f"Error reading file: {str(e)}"}, indent=2)
+
+    # 2. Perform the batch crawl and process results
+    try:
+        crawler = ctx.request_context.lifespan_context.crawler
+        supabase_client = ctx.request_context.lifespan_context.supabase_client
+
+        crawl_results = await crawl_batch(crawler, urls_to_crawl, max_concurrent=max_concurrent)
+        crawl_type = "json_file_batch"
+
+        if not crawl_results:
+            return json.dumps({
+                "success": False,
+                "file_path": file_path,
+                "error": "No content could be crawled from the provided URLs."
+            }, indent=2)
+
+        # 3. Process and store the results (reusing logic from smart_crawl_url)
+        urls, chunk_numbers, contents, metadatas = [], [], [], []
+        chunk_count = 0
+        source_content_map, source_word_counts = {}, {}
+
+        for doc in crawl_results:
+            source_url, md = doc['url'], doc['markdown']
+            chunks = smart_chunk_markdown(md, chunk_size=chunk_size)
+            parsed_url = urlparse(source_url)
+            source_id = parsed_url.netloc or parsed_url.path
+
+            if source_id not in source_content_map:
+                source_content_map[source_id] = md[:5000]
+                source_word_counts[source_id] = 0
+
+            for i, chunk in enumerate(chunks):
+                urls.append(source_url)
+                chunk_numbers.append(i)
+                contents.append(chunk)
+                meta = extract_section_info(chunk)
+                meta.update({
+                    "chunk_index": i, "url": source_url, "source": source_id,
+                    "crawl_type": crawl_type, "crawl_time": str(asyncio.current_task().get_coro().__name__)
+                })
+                metadatas.append(meta)
+                source_word_counts[source_id] += meta.get("word_count", 0)
+                chunk_count += 1
+
+        url_to_full_document = {doc['url']: doc['markdown'] for doc in crawl_results}
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            summaries = list(executor.map(lambda args: extract_source_summary(*args), [(sid, c) for sid, c in source_content_map.items()]))
+
+        for (source_id, _), summary in zip(source_content_map.items(), summaries):
+            update_source_info(supabase_client, source_id, summary, source_word_counts.get(source_id, 0))
+
+        add_documents_to_supabase(supabase_client, urls, chunk_numbers, contents, metadatas, url_to_full_document, batch_size=20)
+
+        return json.dumps({
+            "success": True, "file_path": file_path, "crawl_type": crawl_type,
+            "urls_in_file": len(urls_to_crawl), "pages_crawled": len(crawl_results),
+            "chunks_stored": chunk_count, "code_examples_stored": 0,
+            "sources_updated": len(source_content_map),
+            "urls_crawled": [doc['url'] for doc in crawl_results][:5] + (["..."] if len(crawl_results) > 5 else [])
+        }, indent=2)
+
+    except Exception as e:
+        return json.dumps({"success": False, "file_path": file_path, "error": str(e)}, indent=2)
+
+@mcp.tool()
 async def get_available_sources(ctx: Context) -> str:
     """
     Get all available sources from the sources table.

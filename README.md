@@ -54,20 +54,21 @@ The server provides essential web crawling and search tools:
 
 ### Core Tools (Always Available)
 
-1. **`crawl_single_page`**: Quickly crawl a single web page and store its content in the vector database
-2. **`smart_crawl_url`**: Intelligently crawl a full website based on the type of URL provided (sitemap, llms-full.txt, or a regular webpage that needs to be crawled recursively)
-3. **`get_available_sources`**: Get a list of all available sources (domains) in the database
-4. **`perform_rag_query`**: Search for relevant content using semantic search with optional source filtering
+1. **`crawl_single_page`**: Quickly crawl a single web page and store its content in the vector database.
+2. **`smart_crawl_url`**: Intelligently crawl a full website based on the type of URL provided (sitemap, llms-full.txt, or a regular webpage that needs to be crawled recursively).
+3. **`crawl_urls_from_json`**: Crawl a list of URLs provided in a JSON file. The file must be on the server and contain an object with a `"urls"` key pointing to a list of URL strings.
+4. **`get_available_sources`**: Get a list of all available sources (domains) in the database.
+5. **`perform_rag_query`**: Search for relevant content using semantic search with optional source filtering.
 
 ### Conditional Tools
 
-5. **`search_code_examples`** (requires `USE_AGENTIC_RAG=true`): Search specifically for code examples and their summaries from crawled documentation. This tool provides targeted code snippet retrieval for AI coding assistants.
+6. **`search_code_examples`** (requires `USE_AGENTIC_RAG=true`): Search specifically for code examples and their summaries from crawled documentation. This tool provides targeted code snippet retrieval for AI coding assistants.
 
 ### Knowledge Graph Tools (requires `USE_KNOWLEDGE_GRAPH=true`, see below)
 
-6. **`parse_github_repository`**: Parse a GitHub repository into a Neo4j knowledge graph, extracting classes, methods, functions, and their relationships for hallucination detection
-7. **`check_ai_script_hallucinations`**: Analyze Python scripts for AI hallucinations by validating imports, method calls, and class usage against the knowledge graph
-8. **`query_knowledge_graph`**: Explore and query the Neo4j knowledge graph with commands like `repos`, `classes`, `methods`, and custom Cypher queries
+7. **`parse_github_repository`**: Parse a GitHub repository into a Neo4j knowledge graph, extracting classes, methods, functions, and their relationships for hallucination detection.
+8. **`check_ai_script_hallucinations`**: Analyze Python scripts for AI hallucinations by validating imports, method calls, and class usage against the knowledge graph.
+9. **`query_knowledge_graph`**: Explore and query the Neo4j knowledge graph with commands like `repos`, `classes`, `methods`, and custom Cypher queries.
 
 ## Prerequisites
 
